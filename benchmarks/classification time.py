@@ -198,5 +198,6 @@ classificationTimedeltas.sort()
 classificationsToUse = int(round(PERCENTAGE_TO_USE / 100 * len(classificationTimedeltas)))
 if len(classificationTimedeltas) > 0 and classificationsToUse == 0:
     classificationsToUse = 1
+print("classifications used for calculation (count):", len(classificationTimedeltas))
 print("average classification time (s):", int(round(sum(classificationTimedeltas[0:classificationsToUse]) / classificationsToUse)))
 print("limit classification time (s):", classificationTimedeltas[classificationsToUse - 1])
