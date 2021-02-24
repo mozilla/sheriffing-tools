@@ -195,6 +195,14 @@ for jobGroup in jobGroupsFiltered:
         if max(0, int(classificationTime) - lastTimeOk) < CLASSIFICATION_DELAY_MAX:
             classificationTimedeltas.append(max(0, int(classificationTime) - lastTimeOk))
 classificationTimedeltas.sort()
+if DEBUG:
+    print("Classification times for individual tasks (position: seconds)")
+    for pos in range(len(classificationTimedeltas)):
+        print("%(i)i: %(value).0f" %
+            {
+                'i': pos,
+                'value': classificationTimedeltas[pos],
+            })
 classificationsToUse = int(round(PERCENTAGE_TO_USE / 100 * len(classificationTimedeltas)))
 if len(classificationTimedeltas) > 0 and classificationsToUse == 0:
     classificationsToUse = 1
