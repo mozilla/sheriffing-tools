@@ -16,6 +16,7 @@ def value_from_list(list, key):
     return list[header_to_index[key]]
 
 import argparse
+import json
 import urllib.request
 from datetime import datetime
 
@@ -70,7 +71,7 @@ DATA_SOURCE_API_KEY = query_args["key"]
 # rows are used for calculations.
 DATA_SOURCE_URL = ("https://sql.telemetry.mozilla.org/api/queries/" +
                    str(DATA_SOURCE_QUERY_ID) +
-                   "/results.csv?api_key=" +
+                   "/results.json?api_key=" +
                    DATA_SOURCE_API_KEY)
 log_debug(("DATA_SOURCE_URL:", DATA_SOURCE_URL))
 
@@ -100,45 +101,37 @@ jobGroup = {"repositoryName": None,
 
 data_request = urllib.request.urlopen(DATA_SOURCE_URL, timeout=60)
 
-header_line = data_request.readline().decode("utf-8").strip()
-header_list = str(header_line).split(",")
-log_debug(("header_list:", header_list))
+data = json.load(data_request)
+rows = data["query_result"]["data"]["rows"]
 
-# Build a header to index map for quick lookups.
-header_to_index = {}
-for position in range(len(header_list)):
-    header_to_index[header_list[position]] = position
-log_debug(("header_to_index:", header_to_index))
-
-data_row_next = data_request.readline()
-while data_row_next:
-    data_row_list = data_row_next.decode("utf-8").strip().split(",")
-    data_row_next = data_request.readline()
+data_row_next = rows[0]
+for row_pos in range(len(rows)):
+    data_row = data_row_next
+    data_row_next = rows[row_pos]
     jobGroupEndsWithRow = False
-    if not data_row_next:
+    if row_pos == len(rows) - 1:
         jobGroupEndsWithRow = True
     else:
-        data_row_next_list = data_row_next.decode("utf-8").strip().split(",")
-        if (value_from_list(data_row_list, "repository_id") != value_from_list(data_row_next_list, "repository_id") or
-            value_from_list(data_row_list, "push_id") != value_from_list(data_row_next_list, "push_id") or
-            value_from_list(data_row_list, "job_type_name") != value_from_list(data_row_next_list, "job_type_name")):
+        if (data_row["repository_id"] != data_row_next["repository_id"] or
+            data_row["push_id"] != data_row_next["push_id"] or
+            data_row["job_type_name"] != data_row_next["job_type_name"]):
             # Next row contains new job group.
             jobGroupEndsWithRow = True
     if jobGroup["repositoryName"] is None:
         # Set up job group.
-        jobGroup["repositoryName"] = value_from_list(data_row_list, "repository_name")
-        jobGroup["pushRevision"] = value_from_list(data_row_list, "push_revision")
-        jobGroup["jobName"] = value_from_list(data_row_list, "job_type_name")
+        jobGroup["repositoryName"] = data_row["repository_name"]
+        jobGroup["pushRevision"] = data_row["push_revision"]
+        jobGroup["jobName"] = data_row["job_type_name"]
     jobGroup["jobs"].append({# Timestamp of the push
-                             'repo.push.date': datetime.strptime(value_from_list(data_row_list, "push_time"), "%Y-%m-%d %H:%M").timestamp(),
+                             'repo.push.date': datetime.strptime(data_row["push_time"], "%Y-%m-%dT%H:%M:%S").timestamp(),
                              # Type of the failure classification, e.g. "intermittent", "fixed by commit"
-                             'failure.notes.failure_classification': value_from_list(data_row_list, "classification_name"),
+                             'failure.notes.failure_classification': data_row["classification_name"],
                              # Timestamp of the creation of the failure classification 
-                             'failure.notes.created': datetime.strptime(value_from_list(data_row_list, "classification_timestamp"), "%Y-%m-%d %H:%M").timestamp(),
+                             'failure.notes.created': datetime.strptime(data_row["classification_timestamp"], "%Y-%m-%dT%H:%M:%S.%f").timestamp(),
                              # Timestamp of the job's start time
-                             'action.start_time': datetime.strptime(value_from_list(data_row_list, "job_start_time"), "%Y-%m-%d %H:%M").timestamp(),
+                             'action.start_time': datetime.strptime(data_row["job_start_time"], "%Y-%m-%dT%H:%M:%S").timestamp(),
                              # Timestamp of the job's end time (int)
-                             'action.end_time': datetime.strptime(value_from_list(data_row_list, "job_end_time"), "%Y-%m-%d %H:%M").timestamp()})
+                             'action.end_time': datetime.strptime(data_row["job_end_time"], "%Y-%m-%dT%H:%M:%S").timestamp()})
     if jobGroupEndsWithRow:
         jobGroups.append(jobGroup)
         jobGroup = {"repositoryName": None,
@@ -202,9 +195,6 @@ for jobGroup in jobGroupsFiltered:
         if max(0, int(classificationTime) - lastTimeOk) < CLASSIFICATION_DELAY_MAX:
             classificationTimedeltas.append(max(0, int(classificationTime) - lastTimeOk))
 classificationTimedeltas.sort()
-if DEBUG:
-    for classificationTimedelta in classificationTimedeltas:
-        log_debug(str(classificationTimedelta))
 classificationsToUse = int(round(PERCENTAGE_TO_USE / 100 * len(classificationTimedeltas)))
 if len(classificationTimedeltas) > 0 and classificationsToUse == 0:
     classificationsToUse = 1
