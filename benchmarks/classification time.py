@@ -122,12 +122,21 @@ for row_pos in range(len(rows)):
         jobGroup["repositoryName"] = data_row["repository_name"]
         jobGroup["pushRevision"] = data_row["push_revision"]
         jobGroup["jobName"] = data_row["job_type_name"]
+    
+    classification_timestamp = None
+    try:
+        classification_timestamp = datetime.strptime(data_row["classification_timestamp"], "%Y-%m-%dT%H:%M:%S.%f")
+    except ValueError as error:
+        # If all microseconds of the timestamp are zero, the .json export
+        # doesn't contain digits for the milliseconds
+        # https://github.com/mozilla/redash/issues/1016
+        classification_timestamp = datetime.strptime(data_row["classification_timestamp"], "%Y-%m-%dT%H:%M:%S")
     jobGroup["jobs"].append({# Timestamp of the push
                              'repo.push.date': datetime.strptime(data_row["push_time"], "%Y-%m-%dT%H:%M:%S").timestamp(),
                              # Type of the failure classification, e.g. "intermittent", "fixed by commit"
                              'failure.notes.failure_classification': data_row["classification_name"],
                              # Timestamp of the creation of the failure classification 
-                             'failure.notes.created': datetime.strptime(data_row["classification_timestamp"], "%Y-%m-%dT%H:%M:%S.%f").timestamp(),
+                             'failure.notes.created': classification_timestamp.timestamp(),
                              # Timestamp of the job's start time
                              'action.start_time': datetime.strptime(data_row["job_start_time"], "%Y-%m-%dT%H:%M:%S").timestamp(),
                              # Timestamp of the job's end time (int)
